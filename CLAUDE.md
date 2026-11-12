@@ -30,6 +30,8 @@ readable. No emoji, no em dashes, no GIFs, no filler. Images are PNG only, video
 - Viewer: `uv run mjpython scripts/<script>.py`
 - Checks: `uv run ruff check . && uv run ruff format --check . && uv run pyright && uv run pytest`
 - Blender model: `blender -b -P blender/make_robot.py`
+- MuJoCo type stubs (`typings/`, generated, excluded from checks):
+  `uv run --with pybind11-stubgen pybind11-stubgen mujoco -o typings --ignore-all-errors`
 
 ## Physics model
 

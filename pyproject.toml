@@ -22,6 +22,7 @@ module-root = ""
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+extend-exclude = ["typings"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "ANN", "RUF"]
@@ -31,6 +32,7 @@ pythonVersion = "3.12"
 typeCheckingMode = "standard"
 venvPath = "."
 venv = ".venv"
+exclude = ["typings", ".venv"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
