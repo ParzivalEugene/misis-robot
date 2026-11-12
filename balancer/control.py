@@ -47,8 +47,8 @@ class PidController:
 
     def compute(self, state: RobotState, command: Command, dt: float) -> WheelTorques:
         pitch_reference = self._pitch_reference(state, command, dt)
-        balance = self.gains.pitch_kp * (state.pitch - pitch_reference)
-        balance += self.gains.pitch_kd * state.pitch_rate
+        balance = self.gains.pitch_kp * (state.lean - pitch_reference)
+        balance += self.gains.pitch_kd * state.lean_rate
         turn = self.gains.yaw_kp * (command.yaw_rate - state.yaw_rate)
         return WheelTorques(left=balance - turn, right=balance + turn)
 

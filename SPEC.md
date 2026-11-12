@@ -8,8 +8,10 @@ and programming (physics model and control in MuJoCo with Python).
 
 ## Robot
 
-- Upright rounded body, about 20 cm tall, total mass about 1.4 kg.
+- Upright rounded body, about 20 cm tall, total mass about 1.5 kg.
 - Two legs, each with a hip and a knee joint driven by position servos, links 12 cm long.
+- Two arms on the upper sides of the body, one shoulder joint each, 16 cm long, used to push the
+  body up after a fall and kept along the body while balancing.
 - A wheel at the end of each leg, 10 cm in diameter, driven by a torque-controlled motor with a
   torque limit.
 - Ride height adjustable from 10 cm to 22 cm, measured from wheel axle to hip.
@@ -28,7 +30,9 @@ Required:
 5. Robot recovers from an external push.
 6. Robot drives forward at a commanded speed while staying balanced.
 7. Robot crouches and stands up while balancing.
-8. Fall detection: once the robot falls, wheel motors are disabled until reset.
+8. Fall detection and self-righting: once the robot falls, wheel motors are disabled, and after
+   it settles the robot pushes itself up with its arms, tucks the wheels under its center of mass
+   and resumes balancing.
 9. Eyes change color smoothly with tilt angle: green upright, yellow at large tilt, red when fallen.
 10. Keyboard teleop in the viewer: speed, turn rate, ride height, push, reset.
 11. Scripted scenarios: stand, push, drive, crouch.
@@ -41,12 +45,22 @@ Bonus:
 - Jump.
 - LQR controller with linearization from MuJoCo, compared to PID on the same scenarios.
 
+## Iterations
+
+1. Two-wheeled balancer on PID with scenarios, eyes, teleop and smoke tests. Done.
+2. Two-link legs with inverse kinematics, ride height control, fall detection. Done.
+3. Arms and self-righting after a forward or backward fall. Done.
+4. Blender visual model.
+5. Plots, videos and the Russian README.
+6. Bonus items.
+
 ## Out of scope
 
 - Sensor noise, state estimation, filtering.
 - Real hardware, ROS.
 - SLAM, navigation, path planning.
 - Rough terrain or slopes.
+- Recovery from a sideways fall.
 
 ## Done criteria
 

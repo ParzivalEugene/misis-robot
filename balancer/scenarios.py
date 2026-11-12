@@ -47,7 +47,7 @@ STAND = Scenario(name="stand", duration=30.0)
 PUSH = Scenario(name="push", duration=10.0, pushes=(Push(time=3.0, force=6.0),))
 DRIVE = Scenario(name="drive", duration=14.0, command_at=_drive_command)
 CROUCH = Scenario(name="crouch", duration=15.0, command_at=_crouch_command)
-KNOCKDOWN = Scenario(name="knockdown", duration=6.0, pushes=(Push(time=2.0, force=80.0),))
+KNOCKDOWN = Scenario(name="knockdown", duration=10.0, pushes=(Push(time=2.0, force=80.0),))
 
 SCENARIOS: dict[str, Scenario] = {
     scenario.name: scenario for scenario in (STAND, PUSH, DRIVE, CROUCH, KNOCKDOWN)

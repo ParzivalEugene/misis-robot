@@ -44,6 +44,14 @@ class Side:
     def knee_servo(self) -> str:
         return f"{self.name}_knee_servo"
 
+    @property
+    def shoulder(self) -> str:
+        return f"{self.name}_shoulder"
+
+    @property
+    def shoulder_servo(self) -> str:
+        return f"{self.name}_shoulder_servo"
+
 
 LEFT = Side("left", 1)
 RIGHT = Side("right", -1)
@@ -69,11 +77,11 @@ def _leg_xml(side: Side, params: RobotParams) -> str:
     leg, wheel = params.leg, params.wheel
     return f"""
       <body name="{side.hip}" pos="0 {side.sign * params.leg_offset:.4f} 0">
-        <joint name="{side.hip}" type="hinge" axis="0 1 0" range="-0.3 1.6" damping="0.05"/>
+        <joint name="{side.hip}" type="hinge" axis="0 1 0" damping="0.05"/>
         <geom type="capsule" fromto="0 0 0 0 0 {-leg.thigh_length}" size="{leg.link_radius}"
               mass="{leg.link_mass}" material="accent" {LIMB_CONTACT}/>
         <body name="{side.knee}" pos="0 0 {-leg.thigh_length}">
-          <joint name="{side.knee}" type="hinge" axis="0 1 0" range="-2.8 0" damping="0.05"/>
+          <joint name="{side.knee}" type="hinge" axis="0 1 0" range="-2.8 0.3" damping="0.05"/>
           <geom type="capsule" fromto="0 0 0 0 0 {-leg.shin_length}" size="{leg.link_radius}"
                 mass="{leg.link_mass}" material="accent" {LIMB_CONTACT}/>
           <body name="{side.wheel}"
@@ -85,6 +93,19 @@ def _leg_xml(side: Side, params: RobotParams) -> str:
                   {LIMB_CONTACT}/>
           </body>
         </body>
+      </body>"""
+
+
+def _arm_xml(side: Side, params: RobotParams) -> str:
+    arm = params.arm
+    return f"""
+      <body name="{side.shoulder}"
+            pos="0 {side.sign * params.arm_offset:.4f} {params.shoulder_above_hip:.4f}">
+        <joint name="{side.shoulder}" type="hinge" axis="0 1 0" range="-3.3 3.3" damping="0.05"/>
+        <geom type="capsule" fromto="0 0 0 0 0 {-arm.length}" size="{arm.link_radius}"
+              mass="{arm.link_mass}" material="accent" {LIMB_CONTACT}/>
+        <geom type="sphere" size="{arm.hand_radius}" pos="0 0 {-arm.length}" mass="0.01"
+              material="accent" friction="1.5 0.01 0.001" {LIMB_CONTACT}/>
       </body>"""
 
 
@@ -109,19 +130,22 @@ def _face_xml(params: RobotParams) -> str:
 
 
 def _actuators_xml(params: RobotParams) -> str:
-    leg, torque = params.leg, params.wheel.max_torque
-    servo = (
-        f'kp="{leg.servo_kp}" kv="{leg.servo_kv}" forcelimited="true" '
-        f'forcerange="{-leg.servo_max_force} {leg.servo_max_force}"'
-    )
+    leg, arm, torque = params.leg, params.arm, params.wheel.max_torque
+    leg_servo = _servo_attributes(leg.servo_kp, leg.servo_kv, leg.servo_max_force)
+    arm_servo = _servo_attributes(arm.servo_kp, arm.servo_kv, arm.servo_max_force)
     return "".join(
         f"""
     <motor name="{side.wheel_motor}" joint="{side.wheel}" ctrllimited="true"
            ctrlrange="{-torque} {torque}"/>
-    <position name="{side.hip_servo}" joint="{side.hip}" {servo}/>
-    <position name="{side.knee_servo}" joint="{side.knee}" {servo}/>"""
+    <position name="{side.hip_servo}" joint="{side.hip}" {leg_servo}/>
+    <position name="{side.knee_servo}" joint="{side.knee}" {leg_servo}/>
+    <position name="{side.shoulder_servo}" joint="{side.shoulder}" {arm_servo}/>"""
         for side in SIDES
     )
+
+
+def _servo_attributes(kp: float, kv: float, max_force: float) -> str:
+    return f'kp="{kp}" kv="{kv}" forcelimited="true" forcerange="{-max_force} {max_force}"'
 
 
 def _sensors_xml() -> str:
@@ -131,9 +155,18 @@ def _sensors_xml() -> str:
         for side in SIDES
         for joint in (side.hip, side.knee, side.wheel)
     )
+    wheels = "".join(
+        f"""
+    <framepos name="{side.wheel}_position" objtype="body" objname="{side.wheel}"/>
+    <framepos name="{side.hip}_position" objtype="body" objname="{side.hip}"/>
+    <framelinvel name="{side.wheel}_linear_velocity" objtype="body" objname="{side.wheel}"/>"""
+        for side in SIDES
+    )
     return f"""
     <framequat name="orientation" objtype="site" objname="imu"/>
-    <gyro name="gyro" site="imu"/>{joints}"""
+    <gyro name="gyro" site="imu"/>
+    <subtreecom name="com" body="{CHASSIS}"/>
+    <subtreelinvel name="com_velocity" body="{CHASSIS}"/>{joints}{wheels}"""
 
 
 def build_mjcf(params: RobotParams, sim: SimParams) -> str:
@@ -165,6 +198,7 @@ def build_mjcf(params: RobotParams, sim: SimParams) -> str:
             {BODY_CONTACT}/>
 {_face_xml(params)}
 {"".join(_leg_xml(side, params) for side in SIDES)}
+{"".join(_arm_xml(side, params) for side in SIDES)}
     </body>
   </worldbody>
   <actuator>{_actuators_xml(params)}

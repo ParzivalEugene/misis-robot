@@ -27,6 +27,19 @@ class LegParams:
 
 
 @dataclass(frozen=True)
+class ArmParams:
+    length: float = 0.16
+    link_radius: float = 0.01
+    hand_radius: float = 0.016
+    link_mass: float = 0.05
+    shoulder_below_top: float = 0.03
+    gap: float = 0.004
+    servo_kp: float = 40.0
+    servo_kv: float = 1.0
+    servo_max_force: float = 8.0
+
+
+@dataclass(frozen=True)
 class WheelParams:
     radius: float = 0.05
     width: float = 0.025
@@ -54,6 +67,7 @@ class AntennaParams:
 class RobotParams:
     body: BodyParams = BodyParams()
     leg: LegParams = LegParams()
+    arm: ArmParams = ArmParams()
     wheel: WheelParams = WheelParams()
     eye: EyeParams = EyeParams()
     antenna: AntennaParams = AntennaParams()
@@ -65,6 +79,14 @@ class RobotParams:
     @property
     def body_top_above_hip(self) -> float:
         return self.body.height - self.body.hip_above_bottom
+
+    @property
+    def shoulder_above_hip(self) -> float:
+        return self.body_top_above_hip - self.arm.shoulder_below_top
+
+    @property
+    def arm_offset(self) -> float:
+        return self.body.width / 2 + self.arm.gap + self.arm.hand_radius
 
     @property
     def leg_offset(self) -> float:
