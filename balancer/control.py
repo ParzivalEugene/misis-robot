@@ -3,6 +3,7 @@ from typing import Protocol
 
 import numpy as np
 
+from balancer.params import LegParams
 from balancer.state import RobotState
 
 
@@ -10,6 +11,7 @@ from balancer.state import RobotState
 class Command:
     forward_velocity: float = 0.0
     yaw_rate: float = 0.0
+    height: float = LegParams().default_height
 
 
 @dataclass(frozen=True)

@@ -1,14 +1,53 @@
+import math
+from dataclasses import dataclass
+
 import mujoco
 
 from balancer.params import RobotParams, SimParams
 
 CHASSIS = "chassis"
-LEFT_WHEEL = "left_wheel"
-RIGHT_WHEEL = "right_wheel"
-LEFT_MOTOR = "left_motor"
-RIGHT_MOTOR = "right_motor"
 EYE_MATERIAL = "eye"
 TRACKING_CAMERA = "track"
+QUARTER_TURN = f"{math.pi / 2:.6f}"
+
+FLOOR_CONTACT = 'contype="1" conaffinity="6"'
+BODY_CONTACT = 'contype="2" conaffinity="1"'
+LIMB_CONTACT = 'contype="4" conaffinity="1"'
+
+
+@dataclass(frozen=True)
+class Side:
+    name: str
+    sign: int
+
+    @property
+    def hip(self) -> str:
+        return f"{self.name}_hip"
+
+    @property
+    def knee(self) -> str:
+        return f"{self.name}_knee"
+
+    @property
+    def wheel(self) -> str:
+        return f"{self.name}_wheel"
+
+    @property
+    def wheel_motor(self) -> str:
+        return f"{self.name}_wheel_motor"
+
+    @property
+    def hip_servo(self) -> str:
+        return f"{self.name}_hip_servo"
+
+    @property
+    def knee_servo(self) -> str:
+        return f"{self.name}_knee_servo"
+
+
+LEFT = Side("left", 1)
+RIGHT = Side("right", -1)
+SIDES = (LEFT, RIGHT)
 
 
 def _assets_xml() -> str:
@@ -18,7 +57,7 @@ def _assets_xml() -> str:
              rgb1="0.82 0.84 0.86" rgb2="0.74 0.76 0.78"/>
     <texture name="sky" type="skybox" builtin="gradient" width="512" height="512"
              rgb1="0.95 0.96 0.98" rgb2="0.70 0.74 0.80"/>
-    <material name="floor" texture="grid" texrepeat="8 8" reflectance="0.05"/>
+    <material name="floor" texture="grid" texrepeat="8 8" reflectance="0.02"/>
     <material name="shell" rgba="0.92 0.92 0.90 1" specular="0.2" shininess="0.2"/>
     <material name="tire" rgba="0.12 0.12 0.13 1" specular="0.1"/>
     <material name="eye" rgba="0.05 0.05 0.05 1" emission="1"/>
@@ -26,26 +65,39 @@ def _assets_xml() -> str:
   </asset>"""
 
 
-def _wheel_xml(name: str, side: float, params: RobotParams) -> str:
-    wheel = params.wheel
+def _leg_xml(side: Side, params: RobotParams) -> str:
+    leg, wheel = params.leg, params.wheel
     return f"""
-      <body name="{name}" pos="0 {side * params.wheel_offset:.4f} 0">
-        <joint name="{name}" type="hinge" axis="0 1 0" damping="0.001" armature="0.0005"/>
-        <geom type="cylinder" size="{wheel.radius} {wheel.width / 2}" euler="90 0 0"
-              mass="{wheel.mass}" material="tire" friction="1.2 0.01 0.001"/>
+      <body name="{side.hip}" pos="0 {side.sign * params.leg_offset:.4f} 0">
+        <joint name="{side.hip}" type="hinge" axis="0 1 0" range="-0.3 1.6" damping="0.05"/>
+        <geom type="capsule" fromto="0 0 0 0 0 {-leg.thigh_length}" size="{leg.link_radius}"
+              mass="{leg.link_mass}" material="accent" {LIMB_CONTACT}/>
+        <body name="{side.knee}" pos="0 0 {-leg.thigh_length}">
+          <joint name="{side.knee}" type="hinge" axis="0 1 0" range="-2.8 0" damping="0.05"/>
+          <geom type="capsule" fromto="0 0 0 0 0 {-leg.shin_length}" size="{leg.link_radius}"
+                mass="{leg.link_mass}" material="accent" {LIMB_CONTACT}/>
+          <body name="{side.wheel}"
+                pos="0 {side.sign * params.wheel_offset_from_leg:.4f} {-leg.shin_length}">
+            <joint name="{side.wheel}" type="hinge" axis="0 1 0" damping="0.001"
+                   armature="0.0005"/>
+            <geom type="cylinder" size="{wheel.radius} {wheel.width / 2}" euler="{QUARTER_TURN} 0 0"
+                  mass="{wheel.mass}" material="tire" friction="1.2 0.01 0.001"
+                  {LIMB_CONTACT}/>
+          </body>
+        </body>
       </body>"""
 
 
 def _face_xml(params: RobotParams) -> str:
     body, eye, antenna = params.body, params.eye, params.antenna
-    top = body.height - body.bottom_below_axle
+    top = params.body_top_above_hip
     eye_x = body.depth / 2 + eye.thickness / 2 - 0.001
     eye_z = top - eye.height_from_top
     ball_z = top + antenna.length
     eyes = "".join(
         f"""
       <geom class="visual" type="cylinder" size="{eye.radius} {eye.thickness / 2}"
-            pos="{eye_x:.4f} {side * eye.spacing / 2:.4f} {eye_z:.4f}" euler="0 90 0"
+            pos="{eye_x:.4f} {side * eye.spacing / 2:.4f} {eye_z:.4f}" euler="0 {QUARTER_TURN} 0"
             material="{EYE_MATERIAL}"/>"""
         for side in (1, -1)
     )
@@ -56,9 +108,39 @@ def _face_xml(params: RobotParams) -> str:
             pos="0 0 {ball_z:.4f}" material="accent"/>"""
 
 
+def _actuators_xml(params: RobotParams) -> str:
+    leg, torque = params.leg, params.wheel.max_torque
+    servo = (
+        f'kp="{leg.servo_kp}" kv="{leg.servo_kv}" forcelimited="true" '
+        f'forcerange="{-leg.servo_max_force} {leg.servo_max_force}"'
+    )
+    return "".join(
+        f"""
+    <motor name="{side.wheel_motor}" joint="{side.wheel}" ctrllimited="true"
+           ctrlrange="{-torque} {torque}"/>
+    <position name="{side.hip_servo}" joint="{side.hip}" {servo}/>
+    <position name="{side.knee_servo}" joint="{side.knee}" {servo}/>"""
+        for side in SIDES
+    )
+
+
+def _sensors_xml() -> str:
+    joints = "".join(
+        f"""
+    <jointvel name="{joint}_velocity" joint="{joint}"/>"""
+        for side in SIDES
+        for joint in (side.hip, side.knee, side.wheel)
+    )
+    return f"""
+    <framequat name="orientation" objtype="site" objname="imu"/>
+    <gyro name="gyro" site="imu"/>{joints}"""
+
+
 def build_mjcf(params: RobotParams, sim: SimParams) -> str:
     body = params.body
+    standing_height = params.wheel.radius + params.leg.default_height
     return f"""<mujoco model="robot_balancer">
+  <compiler angle="radian"/>
   <option timestep="{sim.timestep}" integrator="implicitfast"/>
   <visual>
     <global offwidth="1280" offheight="720"/>
@@ -72,30 +154,22 @@ def build_mjcf(params: RobotParams, sim: SimParams) -> str:
 {_assets_xml()}
   <worldbody>
     <light pos="1 -1 3" dir="-0.3 0.3 -1" directional="true" castshadow="true"/>
-    <geom name="floor" type="plane" size="20 20 0.1" material="floor"/>
-    <body name="{CHASSIS}" pos="0 0 {params.axle_height:.4f}">
+    <geom name="floor" type="plane" size="20 20 0.1" material="floor" {FLOOR_CONTACT}/>
+    <body name="{CHASSIS}" pos="0 0 {standing_height:.4f}">
       <freejoint/>
-      <camera name="{TRACKING_CAMERA}" mode="trackcom" pos="0.7 -0.7 0.25"
-              xyaxes="1 1 0 -0.25 0.25 1.4"/>
-      <site name="imu" pos="0 0 {params.body_center_above_axle:.4f}"/>
+      <camera name="{TRACKING_CAMERA}" mode="trackcom" pos="0.8 -0.8 0.15"
+              xyaxes="1 1 0 -0.2 0.2 1.4"/>
+      <site name="imu" pos="0 0 {params.body_center_above_hip:.4f}"/>
       <geom type="box" size="{body.depth / 2} {body.width / 2} {body.height / 2}"
-            pos="0 0 {params.body_center_above_axle:.4f}" mass="{body.mass}" material="shell"/>
+            pos="0 0 {params.body_center_above_hip:.4f}" mass="{body.mass}" material="shell"
+            {BODY_CONTACT}/>
 {_face_xml(params)}
-{_wheel_xml(LEFT_WHEEL, 1, params)}
-{_wheel_xml(RIGHT_WHEEL, -1, params)}
+{"".join(_leg_xml(side, params) for side in SIDES)}
     </body>
   </worldbody>
-  <actuator>
-    <motor name="{LEFT_MOTOR}" joint="{LEFT_WHEEL}" ctrllimited="true"
-           ctrlrange="{-params.wheel.max_torque} {params.wheel.max_torque}"/>
-    <motor name="{RIGHT_MOTOR}" joint="{RIGHT_WHEEL}" ctrllimited="true"
-           ctrlrange="{-params.wheel.max_torque} {params.wheel.max_torque}"/>
+  <actuator>{_actuators_xml(params)}
   </actuator>
-  <sensor>
-    <framequat name="orientation" objtype="site" objname="imu"/>
-    <gyro name="gyro" site="imu"/>
-    <jointvel name="left_wheel_velocity" joint="{LEFT_WHEEL}"/>
-    <jointvel name="right_wheel_velocity" joint="{RIGHT_WHEEL}"/>
+  <sensor>{_sensors_xml()}
   </sensor>
 </mujoco>
 """
